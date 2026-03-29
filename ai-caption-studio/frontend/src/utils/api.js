@@ -20,7 +20,11 @@ export async function uploadFile(file) {
   const form = new FormData();
   form.append("file", file);
   const res = await fetch(`${API_BASE}/upload`, { method: "POST", body: form });
-  return handleResponse(res);
+  const data = await handleResponse(res);
+  if (data.preview_url && !data.preview_url.startsWith("http") && API_BASE) {
+    data.preview_url = `${API_BASE}${data.preview_url}`;
+  }
+  return data;
 }
 
 // ─── Transcribe ──────────────────────────────────────────────────────────────
@@ -53,7 +57,11 @@ export async function renderVideo(filename, captions, style) {
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify({ filename, captions, style }),
   });
-  return handleResponse(res);
+  const data = await handleResponse(res);
+  if (data.output_url && !data.output_url.startsWith("http") && API_BASE) {
+    data.output_url = `${API_BASE}${data.output_url}`;
+  }
+  return data;
 }
 
 // ─── Translate captions ───────────────────────────────────────────────────────

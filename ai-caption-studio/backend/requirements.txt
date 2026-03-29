@@ -1,0 +1,7 @@
+flask==3.0.3
+flask-cors==4.0.1
+faster-whisper>=1.0.0
+werkzeug==3.0.3
+numpy>=1.24.0
+deep-translator>=1.11.4
+gunicorn>=21.2.0

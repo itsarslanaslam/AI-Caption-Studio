@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { captionsToSRT, captionsToVTT, captionsToTranscript, downloadTextFile } from "../utils/subtitleFormats.js";
 import { exportSubtitles } from "../utils/api.js";
+import { InboxIcon, DownloadIcon, EyeIcon, ClapperIcon, CheckIcon } from "./icons.jsx";
 
 export default function ExportPanel({
   captions,
@@ -8,6 +9,7 @@ export default function ExportPanel({
   isRendering,
   renderOutputUrl,
   onRender,
+  onPreview,
 }) {
   const [exportingFormat, setExportingFormat] = useState(null);
 
@@ -53,9 +55,9 @@ export default function ExportPanel({
     <div className="export-panel">
       {noCaptions && (
         <div className="empty-state">
-          <div className="empty-state-icon">📤</div>
-          <div>No captions to export yet.</div>
-          <div>Transcribe or add captions first.</div>
+          <div className="empty-state-icon"><InboxIcon width={22} height={22} /></div>
+          <div className="empty-state-title">No captions to export yet</div>
+          <p className="empty-state-desc">Transcribe or add captions first.</p>
         </div>
       )}
 
@@ -75,7 +77,7 @@ export default function ExportPanel({
                 className="btn btn-ghost btn-sm"
                 onClick={handleClientSRTDownload}
               >
-                ↓ SRT
+                <DownloadIcon width={12} height={12} /> SRT
               </button>
             </div>
 
@@ -90,7 +92,7 @@ export default function ExportPanel({
                 className="btn btn-ghost btn-sm"
                 onClick={handleClientVTTDownload}
               >
-                ↓ VTT
+                <DownloadIcon width={12} height={12} /> VTT
               </button>
             </div>
 
@@ -105,7 +107,7 @@ export default function ExportPanel({
                 className="btn btn-ghost btn-sm"
                 onClick={handleTranscriptDownload}
               >
-                ↓ TXT
+                <DownloadIcon width={12} height={12} /> TXT
               </button>
             </div>
           </div>
@@ -122,25 +124,35 @@ export default function ExportPanel({
               style settings. This may take a minute for longer files.
             </div>
 
-            <button
-              className={`btn btn-accent ${isRendering ? "loading" : ""}`}
-              onClick={onRender}
-              disabled={isRendering}
-              style={{ marginTop: 4 }}
-            >
-              {isRendering ? "Rendering…" : "🎬 Render Video"}
-            </button>
+            <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+              <button
+                className="btn btn-ghost"
+                onClick={onPreview}
+                title="Watch the video with the current captions and style before rendering"
+              >
+                <EyeIcon width={14} height={14} /> Preview
+              </button>
+
+              <button
+                className={`btn btn-accent ${isRendering ? "loading" : ""}`}
+                onClick={onRender}
+                disabled={isRendering}
+              >
+                {!isRendering && <ClapperIcon width={14} height={14} />}
+                {isRendering ? "Rendering…" : "Render Video"}
+              </button>
+            </div>
 
             {renderOutputUrl && (
               <div className="render-output">
-                <span className="render-success">✓ Video rendered successfully!</span>
+                <span className="render-success"><CheckIcon width={13} height={13} /> Video rendered successfully!</span>
                 <a
                   href={renderOutputUrl}
                   download="output_with_captions.mp4"
                   className="btn btn-green btn-sm"
-                  style={{ textDecoration: "none", display: "inline-flex" }}
+                  style={{ textDecoration: "none" }}
                 >
-                  ↓ Download MP4
+                  <DownloadIcon width={12} height={12} /> Download MP4
                 </a>
               </div>
             )}

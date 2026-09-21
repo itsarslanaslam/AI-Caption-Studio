@@ -8,6 +8,7 @@ import Timeline from "./components/Timeline.jsx";
 import ExportPanel from "./components/ExportPanel.jsx";
 import { uploadFile, transcribeFile, renderVideo, translateCaptions, batchTranscribe } from "./utils/api.js";
 import { captionsToSRT, downloadTextFile } from "./utils/subtitleFormats.js";
+import { BoltIcon, CloseIcon, MicIcon, GlobeIcon, ChatIcon, SlidersIcon, InboxIcon, WarningIcon } from "./components/icons.jsx";
 
 // ─── Default style config ────────────────────────────────────────────────────
 export const DEFAULT_STYLE = {
@@ -15,7 +16,7 @@ export const DEFAULT_STYLE = {
   fontSize:        14,
   textColor:       "#ffffff",
   bgColor:         "#000000",
-  bgAlpha:         160,        // 0 = transparent … 255 = opaque
+  bgAlpha:         0,          // 0 = transparent … 255 = opaque
   strokeColor:     "#000000",
   strokeWidth:     0,
   shadow:          2,
@@ -29,11 +30,19 @@ export const DEFAULT_STYLE = {
   animation:       "none",     // "none" | "fade" | "slide-up"
 };
 
+// Style defaults applied when the aspect ratio is picked, tuned per ratio
+// so captions read well at that frame shape out of the box.
+const ASPECT_RATIO_STYLE_DEFAULTS = {
+  "16:9": { fontSize: 30 },
+  "9:16": { fontSize: 20, marginH: 50, marginV: 50, captionPaddingV: 4 },
+  "1:1":  { fontSize: 26 },
+};
+
 // ─── App ─────────────────────────────────────────────────────────────────────
 export default function App() {
   const [uploadedFile,    setUploadedFile]    = useState(null);
   const [captions,        setCaptions]        = useState([]);
-  const [style,           setStyle]           = useState(DEFAULT_STYLE);
+  const [style,           setStyle]           = useState({ ...DEFAULT_STYLE, ...ASPECT_RATIO_STYLE_DEFAULTS["16:9"] });
   const [currentTime,     setCurrentTime]     = useState(0);
   const [duration,        setDuration]        = useState(0);
   const [activeTab,       setActiveTab]       = useState("editor");
@@ -48,9 +57,19 @@ export default function App() {
   const [isTranslating,   setIsTranslating]   = useState(false);
   const [wordTimestamps,  setWordTimestamps]  = useState(false);
   const [karaokeMode,     setKaraokeMode]     = useState(false);
-  const [aspectRatio,     setAspectRatio]     = useState(null); // null | "16:9" | "9:16" | "1:1"
+  const [aspectRatio,     setAspectRatio]     = useState("16:9"); // "16:9" | "9:16" | "1:1"
+  const [showPreview,     setShowPreview]     = useState(false);
 
-  const videoPlayerRef = useRef(null);
+  const handleAspectRatioChange = useCallback((r) => {
+    setAspectRatio(r);
+    const defaults = ASPECT_RATIO_STYLE_DEFAULTS[r];
+    if (defaults) {
+      setStyle((prev) => ({ ...prev, ...defaults }));
+    }
+  }, []);
+
+  const videoPlayerRef   = useRef(null);
+  const previewPlayerRef = useRef(null);
 
   // ── Undo / Redo history (refs so they don't trigger extra renders) ────────
   const captionsHistoryRef = useRef([[]]);
@@ -103,10 +122,10 @@ export default function App() {
   }, []);
 
   // ── Upload ──────────────────────────────────────────────────────────────
-  const handleFileUpload = useCallback(async (file) => {
+  const handleFileUpload = useCallback(async (file, onProgress) => {
     try {
       setError(null);
-      const result = await uploadFile(file);
+      const result = await uploadFile(file, onProgress);
       setUploadedFile(result);
       setCaptions([]);
       captionsHistoryRef.current = [[]];
@@ -372,20 +391,33 @@ export default function App() {
     videoPlayerRef.current?.seekTo(time);
   }, []);
 
+  // ── Preview modal ──────────────────────────────────────────────────────
+  // Pause the editor's video first so it can't keep playing behind the
+  // modal — otherwise both players' audio can end up running at once.
+  const handleOpenPreview = useCallback(() => {
+    videoPlayerRef.current?.pause();
+    setShowPreview(true);
+  }, []);
+
+  const handleClosePreview = useCallback(() => {
+    previewPlayerRef.current?.pause();
+    setShowPreview(false);
+  }, []);
+
   // ── Render ──────────────────────────────────────────────────────────────
   const handleRender = useCallback(async () => {
     if (!uploadedFile) return;
     try {
       setIsRendering(true);
       setError(null);
-      const result = await renderVideo(uploadedFile.filename, captions, style);
+      const result = await renderVideo(uploadedFile.filename, captions, style, aspectRatio);
       setRenderOutputUrl(result.output_url);
     } catch (err) {
       setError(`Rendering failed: ${err.message}`);
     } finally {
       setIsRendering(false);
     }
-  }, [uploadedFile, captions, style]);
+  }, [uploadedFile, captions, style, aspectRatio]);
 
   // ── Reset ───────────────────────────────────────────────────────────────
   const handleReset = useCallback(() => {
@@ -459,6 +491,19 @@ export default function App() {
       // Everything else: skip when typing in a field
       if (isEditing) return;
 
+      // While the preview modal is open, keyboard shortcuts should control
+      // it, not the editor's video underneath — otherwise Space here
+      // resumes the background video instead of the one being previewed.
+      if (showPreview) {
+        if (e.code === "Space") {
+          e.preventDefault();
+          previewPlayerRef.current?.togglePlay();
+        } else if (e.code === "Escape") {
+          handleClosePreview();
+        }
+        return;
+      }
+
       if (e.code === "Space") {
         e.preventDefault();
         videoPlayerRef.current?.togglePlay();
@@ -475,12 +520,30 @@ export default function App() {
         }
       } else if (e.code === "Escape") {
         setSelectedId(null);
+        handleClosePreview();
       }
     };
 
+    // Belt-and-suspenders: if a native control button still ends up
+    // focused, the browser's default Space action fires on keyUp (a click
+    // on whatever is focused), which can silently re-toggle playback right
+    // after onKeyDown already toggled it. Suppress that too.
+    const onKeyUp = (e) => {
+      const tag = document.activeElement?.tagName;
+      const isEditing =
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        document.activeElement?.isContentEditable;
+      if (!isEditing && e.code === "Space") e.preventDefault();
+    };
+
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleUndo, handleRedo, handleSeek, handleDeleteCaption]);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [handleUndo, handleRedo, handleSeek, handleDeleteCaption, handleClosePreview, showPreview]);
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
@@ -571,27 +634,30 @@ export default function App() {
                   onClick={handleTranscribe}
                   disabled={isTranscribing}
                 >
-                  {isTranscribing ? "Transcribing…" : "⚡ Auto-Transcribe"}
+                  {!isTranscribing && <BoltIcon width={13} height={13} />}
+                  {isTranscribing ? "Transcribing…" : "Auto-Transcribe"}
                 </button>
 
                 <button className="btn btn-ghost" onClick={handleReset}>
-                  ✕ New File
+                  <CloseIcon width={12} height={12} /> New File
                 </button>
               </div>
 
               {/* Aspect ratio + karaoke controls */}
-              <div className="toolbar" style={{ borderTop: "1px solid rgba(255,255,255,0.05)", gap: 6 }}>
-                <span style={{ fontSize: 11, color: "var(--text3)", whiteSpace: "nowrap" }}>Aspect ratio:</span>
-                {[null, "16:9", "9:16", "1:1"].map((r) => (
-                  <button
-                    key={r ?? "free"}
-                    className={`btn btn-ghost btn-sm ${aspectRatio === r ? "active-ratio" : ""}`}
-                    onClick={() => setAspectRatio(r)}
-                    title={r ?? "Free (default)"}
-                  >
-                    {r ?? "Free"}
-                  </button>
-                ))}
+              <div className="toolbar" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                <span className="toolbar-label">Aspect ratio</span>
+                <div className="segmented">
+                  {["16:9", "9:16", "1:1"].map((r) => (
+                    <button
+                      key={r}
+                      className={`segmented-btn ${aspectRatio === r ? "active" : ""}`}
+                      onClick={() => handleAspectRatioChange(r)}
+                      title={r}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
                 <div style={{ flex: 1 }} />
                 {captions.some((c) => c.words?.length) && (
                   <button
@@ -599,7 +665,7 @@ export default function App() {
                     onClick={() => setKaraokeMode((v) => !v)}
                     title="Highlight each word as it is spoken"
                   >
-                    🎤 Karaoke
+                    <MicIcon width={13} height={13} /> Karaoke
                   </button>
                 )}
               </div>
@@ -607,9 +673,7 @@ export default function App() {
               {/* Translate toolbar — shown only when captions exist */}
               {captions.length > 0 && (
                 <div className="toolbar" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                  <span style={{ fontSize: 12, color: "var(--text-muted, #888)", whiteSpace: "nowrap" }}>
-                    Translate captions:
-                  </span>
+                  <span className="toolbar-label">Translate</span>
                   <select
                     className="select"
                     value={translateLang}
@@ -651,7 +715,8 @@ export default function App() {
                     onClick={handleTranslate}
                     disabled={isTranslating}
                   >
-                    {isTranslating ? "Translating…" : "🌐 Translate"}
+                    {!isTranslating && <GlobeIcon width={13} height={13} />}
+                    {isTranslating ? "Translating…" : "Translate"}
                   </button>
                 </div>
               )}
@@ -660,15 +725,19 @@ export default function App() {
             {/* Right: tabbed panel */}
             <div className="editor-section">
               <div className="tab-bar">
-                {["editor", "style", "export"].map((t) => (
-                  <button
-                    key={t}
-                    className={`tab-btn ${activeTab === t ? "active" : ""}`}
-                    onClick={() => setActiveTab(t)}
-                  >
-                    {t === "editor" ? "Captions" : t === "style" ? "Style" : "Export"}
-                  </button>
-                ))}
+                {["editor", "style", "export"].map((t) => {
+                  const TabIcon = t === "editor" ? ChatIcon : t === "style" ? SlidersIcon : InboxIcon;
+                  return (
+                    <button
+                      key={t}
+                      className={`tab-btn ${activeTab === t ? "active" : ""}`}
+                      onClick={() => setActiveTab(t)}
+                    >
+                      <TabIcon width={13} height={13} />
+                      {t === "editor" ? "Captions" : t === "style" ? "Style" : "Export"}
+                    </button>
+                  );
+                })}
               </div>
 
               <div className="panel-body">
@@ -710,6 +779,7 @@ export default function App() {
                     isRendering={isRendering}
                     renderOutputUrl={renderOutputUrl}
                     onRender={handleRender}
+                    onPreview={handleOpenPreview}
                   />
                 )}
               </div>
@@ -734,8 +804,31 @@ export default function App() {
 
       {error && (
         <div className="error-toast">
+          <WarningIcon width={15} height={15} />
           <span>{error}</span>
-          <button onClick={() => setError(null)}>✕</button>
+          <button onClick={() => setError(null)}><CloseIcon width={13} height={13} /></button>
+        </div>
+      )}
+
+      {showPreview && uploadedFile && (
+        <div className="preview-modal-overlay" onClick={handleClosePreview}>
+          <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="preview-modal-header">
+              <span>Preview — how the rendered video will look</span>
+              <button className="btn-icon" onClick={handleClosePreview} title="Close preview"><CloseIcon width={13} height={13} /></button>
+            </div>
+            <div className="preview-modal-body">
+              <VideoPlayer
+                ref={previewPlayerRef}
+                fileUrl={uploadedFile.preview_url}
+                fileType={uploadedFile.file_type}
+                captions={captions}
+                style={style}
+                karaokeMode={karaokeMode}
+                aspectRatio={aspectRatio}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -21,27 +21,30 @@ A full-stack web application for automatically generating, editing, styling, and
 
 ## Prerequisites
 
-| Requirement | Version | Notes |
-|-------------|---------|-------|
-| Python      | 3.10+   | |
-| Node.js     | 18+     | |
-| FFmpeg      | 6+      | Must be on `PATH` |
-| CUDA (optional) | any | For GPU-accelerated Whisper |
+| Requirement     | Version | Notes                       |
+| --------------- | ------- | --------------------------- |
+| Python          | 3.10+   |                             |
+| Node.js         | 18+     |                             |
+| FFmpeg          | 6+      | Must be on`PATH`          |
+| CUDA (optional) | any     | For GPU-accelerated Whisper |
 
 ### Install FFmpeg
 
 **Windows:**
+
 ```
 winget install Gyan.FFmpeg
 # or download from https://ffmpeg.org/download.html and add to PATH
 ```
 
 **macOS:**
+
 ```
 brew install ffmpeg
 ```
 
 **Linux (Ubuntu/Debian):**
+
 ```
 sudo apt update && sudo apt install ffmpeg
 ```
@@ -75,10 +78,13 @@ pip install -r requirements.txt
 ```
 
 > **Note:** Whisper requires PyTorch. If you have a GPU, install the CUDA version of torch first:
+>
 > ```
 > pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 > ```
+>
 > For CPU-only:
+>
 > ```
 > pip install torch torchvision torchaudio
 > ```
@@ -97,6 +103,7 @@ npm install
 Open **two terminals**:
 
 **Terminal 1 — Backend**
+
 ```bash
 cd backend
 # Activate venv first (see above)
@@ -105,6 +112,7 @@ python app.py
 ```
 
 **Terminal 2 — Frontend**
+
 ```bash
 cd frontend
 npm run dev
@@ -168,28 +176,28 @@ ai-caption-studio/
 
 ## Backend API Reference
 
-| Method | Endpoint        | Description |
-|--------|-----------------|-------------|
-| POST   | `/upload`       | Upload a video/audio file |
-| POST   | `/transcribe`   | Run Whisper on uploaded file |
-| POST   | `/render`       | Burn captions into video (FFmpeg) |
-| POST   | `/export/srt`   | Generate SRT file |
-| POST   | `/export/vtt`   | Generate VTT file |
-| GET    | `/files/:name`  | Serve uploaded file |
-| GET    | `/outputs/:name`| Serve rendered output |
-| GET    | `/health`       | Health check |
+| Method | Endpoint           | Description                       |
+| ------ | ------------------ | --------------------------------- |
+| POST   | `/upload`        | Upload a video/audio file         |
+| POST   | `/transcribe`    | Run Whisper on uploaded file      |
+| POST   | `/render`        | Burn captions into video (FFmpeg) |
+| POST   | `/export/srt`    | Generate SRT file                 |
+| POST   | `/export/vtt`    | Generate VTT file                 |
+| GET    | `/files/:name`   | Serve uploaded file               |
+| GET    | `/outputs/:name` | Serve rendered output             |
+| GET    | `/health`        | Health check                      |
 
 ---
 
 ## Whisper Models
 
-| Model  | English VRAM | Speed | Accuracy |
-|--------|-------------|-------|----------|
-| tiny   | ~1 GB       | Fastest | Low |
-| base   | ~1 GB       | Fast | Good |
-| small  | ~2 GB       | Moderate | Better |
-| medium | ~5 GB       | Slow | High |
-| large  | ~10 GB      | Slowest | Best |
+| Model  | English VRAM | Speed    | Accuracy |
+| ------ | ------------ | -------- | -------- |
+| tiny   | ~1 GB        | Fastest  | Low      |
+| base   | ~1 GB        | Fast     | Good     |
+| small  | ~2 GB        | Moderate | Better   |
+| medium | ~5 GB        | Slow     | High     |
+| large  | ~10 GB       | Slowest  | Best     |
 
 On first use each model is downloaded automatically (~74 MB for base).
 
@@ -198,6 +206,7 @@ On first use each model is downloaded automatically (~74 MB for base).
 ## ASS Subtitle Format
 
 The renderer generates [ASS v4+](http://www.tcax.org/docs/ass-specs.htm) subtitles with:
+
 - Full `[V4+ Styles]` section (font, color, outline, shadow, alignment, margins)
 - `{\pos(x,y)}` tags for per-caption custom positioning
 - Alpha-channel background color
@@ -220,3 +229,8 @@ Ensure the backend is running on port 5000 and the Vite proxy is active (port 30
 
 **Windows path errors in FFmpeg**
 The renderer escapes Windows paths automatically. Avoid putting the project in a directory with special characters.
+
+
+Deployment:
+Backend - [huggingface.co/EzioAud
+](https://huggingface.co/EzioAud)Frontend: Vercel

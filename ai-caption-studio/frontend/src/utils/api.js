@@ -16,15 +16,37 @@ async function handleResponse(res) {
 
 // ─── Upload ──────────────────────────────────────────────────────────────────
 
-export async function uploadFile(file) {
-  const form = new FormData();
-  form.append("file", file);
-  const res = await fetch(`${API_BASE}/upload`, { method: "POST", body: form });
-  const data = await handleResponse(res);
-  if (data.preview_url && !data.preview_url.startsWith("http") && API_BASE) {
-    data.preview_url = `${API_BASE}${data.preview_url}`;
-  }
-  return data;
+export function uploadFile(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append("file", file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE}/upload`);
+
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+      };
+    }
+
+    xhr.onload = () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText); } catch { /* non-JSON response */ }
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        if (data.preview_url && !data.preview_url.startsWith("http") && API_BASE) {
+          data.preview_url = `${API_BASE}${data.preview_url}`;
+        }
+        resolve(data);
+      } else {
+        reject(new Error(data.error || `HTTP ${xhr.status}`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("Network error during upload"));
+    xhr.send(form);
+  });
 }
 
 // ─── Transcribe ──────────────────────────────────────────────────────────────
@@ -51,11 +73,11 @@ export async function batchTranscribe(filenames, modelSize = "base", language = 
 
 // ─── Render ──────────────────────────────────────────────────────────────────
 
-export async function renderVideo(filename, captions, style) {
+export async function renderVideo(filename, captions, style, aspectRatio = null) {
   const res = await fetch(`${API_BASE}/render`, {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify({ filename, captions, style }),
+    body:    JSON.stringify({ filename, captions, style, aspect_ratio: aspectRatio }),
   });
   const data = await handleResponse(res);
   if (data.output_url && !data.output_url.startsWith("http") && API_BASE) {

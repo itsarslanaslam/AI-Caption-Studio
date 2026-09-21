@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { uploadFile, batchTranscribe } from "../utils/api.js";
 import { captionsToSRT, downloadTextFile } from "../utils/subtitleFormats.js";
+import { UploadIcon, LayersIcon, FolderIcon, CloseIcon, CheckIcon, BackIcon, BoltIcon } from "./icons.jsx";
 
 const ACCEPTED = ".mp4,.mp3,.wav,.avi,.mov,.mkv,.webm,.m4a,.ogg,.flac";
 const FORMATS  = ["MP4", "MP3", "WAV", "AVI", "MOV", "MKV", "WEBM", "M4A"];
@@ -9,6 +10,7 @@ const FORMATS  = ["MP4", "MP3", "WAV", "AVI", "MOV", "MKV", "WEBM", "M4A"];
 export default function FileUpload({ onUpload, modelSize, language }) {
   const [dragOver,    setDragOver]    = useState(false);
   const [uploading,   setUploading]   = useState(false);
+  const [uploadPct,   setUploadPct]   = useState(0);
   const [uploadError, setUploadError] = useState(null);
   const [batchMode,   setBatchMode]   = useState(false);
   const inputRef = useRef(null);
@@ -17,9 +19,10 @@ export default function FileUpload({ onUpload, modelSize, language }) {
     async (file) => {
       if (!file) return;
       setUploading(true);
+      setUploadPct(0);
       setUploadError(null);
       try {
-        await onUpload(file);
+        await onUpload(file, setUploadPct);
       } catch (err) {
         setUploadError(err.message);
       } finally {
@@ -58,9 +61,9 @@ export default function FileUpload({ onUpload, modelSize, language }) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, width: "100%", maxWidth: 560 }}>
+    <div className="upload-shell">
       <div
-        className={`upload-card ${dragOver ? "drag-over" : ""}`}
+        className={`upload-card ${dragOver ? "drag-over" : ""} ${uploading ? "is-uploading" : ""}`}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
@@ -74,46 +77,57 @@ export default function FileUpload({ onUpload, modelSize, language }) {
           onChange={handleChange}
         />
 
-        <div className="upload-icon">
-          {uploading ? "⏳" : dragOver ? "📂" : "🎞️"}
+        <div className="upload-icon-tile">
+          {uploading ? <span className="upload-spinner" /> : <UploadIcon width={26} height={26} />}
         </div>
 
         <h2 className="upload-title">
-          {uploading ? "Uploading…" : "Drop your file here"}
+          {uploading ? "Uploading" : "Drop your file to begin"}
         </h2>
 
         <p className="upload-subtitle">
           {uploading
-            ? "Please wait while your file is being uploaded"
-            : "Drag & drop a video or audio file, or click to browse.\nSupports MP4, AVI, MOV, MP3, WAV and more."}
+            ? "Your file is being uploaded — this will just take a moment."
+            : "Drag and drop a video or audio file, or browse from your device."}
         </p>
 
-        {!uploading && (
-          <button className="btn btn-accent" onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}>
-            Choose File
-          </button>
+        {uploading ? (
+          <div className="upload-progress-row">
+            <div className="upload-progress">
+              <div className="upload-progress-bar" style={{ width: `${uploadPct}%` }} />
+            </div>
+            <span className="upload-progress-pct">{uploadPct}%</span>
+          </div>
+        ) : (
+          <div className="upload-actions">
+            <button className="btn btn-accent btn-upload" onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}>
+              <FolderIcon width={15} height={15} />
+              Browse Files
+            </button>
+            <span className="upload-or">or drop it anywhere in this area</span>
+          </div>
         )}
 
         {uploadError && (
-          <p style={{ color: "var(--red)", marginTop: 12, fontSize: 12 }}>
-            {uploadError}
-          </p>
+          <p className="upload-error">{uploadError}</p>
         )}
 
-        <div className="upload-formats">
-          {FORMATS.map((f) => (
-            <span key={f} className="format-badge">{f}</span>
-          ))}
+        <div className="upload-divider" />
+
+        <div className="upload-formats-row">
+          <span className="upload-formats-label">Supported formats</span>
+          <div className="upload-formats">
+            {FORMATS.map((f) => (
+              <span key={f} className="format-badge">{f}</span>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Batch mode switch */}
-      <button
-        className="btn btn-ghost btn-sm"
-        onClick={() => setBatchMode(true)}
-        style={{ fontSize: 12 }}
-      >
-        📦 Batch process multiple files
+      <button className="batch-link" onClick={() => setBatchMode(true)}>
+        <LayersIcon width={15} height={15} />
+        Batch process multiple files
       </button>
     </div>
   );
@@ -121,7 +135,14 @@ export default function FileUpload({ onUpload, modelSize, language }) {
 
 // ── Batch upload panel ────────────────────────────────────────────────────────
 
-const STATUS_ICON = { pending: "⏳", uploading: "⬆", transcribing: "🔊", done: "✓", error: "✕" };
+function StatusIcon({ status }) {
+  if (status === "done")  return <CheckIcon className="batch-status-icon status-done" width={13} height={13} />;
+  if (status === "error") return <CloseIcon className="batch-status-icon status-error" width={13} height={13} />;
+  if (status === "uploading" || status === "transcribing") {
+    return <span className="batch-status-icon"><span className="upload-spinner upload-spinner-sm" /></span>;
+  }
+  return <span className="batch-status-icon"><span className="status-dot-pending" /></span>;
+}
 
 function BatchUpload({ onBack, modelSize, language }) {
   const [files,   setFiles]   = useState([]);
@@ -192,9 +213,9 @@ function BatchUpload({ onBack, modelSize, language }) {
   return (
     <div className="batch-panel">
       <div className="batch-header">
-        <button className="btn-icon" onClick={onBack} title="Back to single file">← Back</button>
-        <span style={{ fontWeight: 600, fontSize: 14 }}>Batch Processing</span>
-        <span style={{ fontSize: 11, color: "var(--text3)", flex: 1 }}>Auto-transcribe multiple files &amp; download SRT</span>
+        <button className="btn-icon" onClick={onBack} title="Back to single file"><BackIcon width={15} height={15} /></button>
+        <span className="batch-title">Batch Processing</span>
+        <span className="batch-title-desc">Auto-transcribe multiple files &amp; download SRT</span>
       </div>
 
       <div
@@ -211,8 +232,8 @@ function BatchUpload({ onBack, modelSize, language }) {
           style={{ display: "none" }}
           onChange={(e) => addFiles(e.target.files)}
         />
-        <span style={{ fontSize: 24 }}>📂</span>
-        <span style={{ fontSize: 13, color: "var(--text2)" }}>Drop files here or click to select multiple</span>
+        <FolderIcon width={22} height={22} />
+        <span className="batch-drop-label">Drop files here or click to select multiple</span>
       </div>
 
       {files.length > 0 && (
@@ -222,17 +243,16 @@ function BatchUpload({ onBack, modelSize, language }) {
               key={i}
               className={`batch-file-item ${item.status === "error" ? "batch-error" : item.status === "done" ? "batch-done" : ""}`}
             >
-              <span className="batch-status-icon">{STATUS_ICON[item.status] ?? "?"}</span>
+              <StatusIcon status={item.status} />
               <span className="batch-file-name" title={item.file.name}>{item.file.name}</span>
               {item.error && <span className="batch-error-msg" title={item.error}>Error</span>}
-              {item.status === "done" && <span style={{ fontSize: 11, color: "var(--green)", marginLeft: "auto" }}>↓ SRT</span>}
+              {item.status === "done" && <span className="batch-done-label">SRT ready</span>}
               {item.status === "pending" && (
                 <button
-                  className="btn-icon"
+                  className="btn-icon batch-remove"
                   onClick={() => removeFile(i)}
-                  style={{ marginLeft: "auto", color: "var(--text3)" }}
                 >
-                  ✕
+                  <CloseIcon width={12} height={12} />
                 </button>
               )}
             </div>
@@ -240,14 +260,15 @@ function BatchUpload({ onBack, modelSize, language }) {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+      <div className="batch-footer">
         {files.some((f) => f.status === "pending") && (
           <button
             className={`btn btn-accent ${running ? "loading" : ""}`}
             onClick={processAll}
             disabled={running}
           >
-            {running ? "Processing…" : "⚡ Process All"}
+            {!running && <BoltIcon width={13} height={13} />}
+            {running ? "Processing…" : "Process All"}
           </button>
         )}
         {files.length > 0 && !running && (

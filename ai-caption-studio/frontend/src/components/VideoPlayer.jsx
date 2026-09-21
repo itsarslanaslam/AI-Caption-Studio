@@ -1,16 +1,31 @@
 import {
   useRef,
+  useState,
+  useEffect,
   useReducer,
   useImperativeHandle,
   forwardRef,
   useMemo,
   useCallback,
 } from "react";
+import { MusicNoteIcon } from "./icons.jsx";
+
+// Default canvas used when the real video resolution isn't known yet —
+// matches the backend's fallback for audio-only renders.
+const DEFAULT_NATURAL_SIZE = { width: 1280, height: 720 };
 
 /**
  * Build the CSS style for the caption overlay from the style config.
+ *
+ * Sizes are expressed in `cqh`/`cqw` (container query units, relative to
+ * the .video-wrapper's rendered size) rather than fixed px, scaled against
+ * the video's native resolution. That way `fontSize: 36` always means
+ * "36 real output pixels tall" both here and in the burned-in render
+ * (backend sets the ASS PlayRes to the same native resolution) — so the
+ * preview looks the same size as the final video, at any preview window
+ * size or aspect ratio, including fullscreen.
  */
-function buildCaptionTextStyle(style) {
+function buildCaptionTextStyle(style, naturalSize) {
   const {
     fontFamily      = "Arial",
     fontSize        = 14,
@@ -29,9 +44,13 @@ function buildCaptionTextStyle(style) {
   const bgRgb    = hexToRgb(bgColor);
   const bgAlphaF = bgAlpha / 255;
 
+  const { width: nw, height: nh } = naturalSize;
+  const toCqh = (px) => `${(px / nh) * 100}cqh`;
+  const toCqw = (px) => `${(px / nw) * 100}cqw`;
+
   return {
     fontFamily,
-    fontSize:        `${fontSize}px`,
+    fontSize:        toCqh(fontSize),
     fontWeight:      bold   ? "700" : "400",
     fontStyle:       italic ? "italic" : "normal",
     color:           textColor,
@@ -39,15 +58,17 @@ function buildCaptionTextStyle(style) {
       ? `rgba(${bgRgb.r},${bgRgb.g},${bgRgb.b},${bgAlphaF.toFixed(2)})`
       : "transparent",
     WebkitTextStroke:
-      strokeWidth > 0 ? `${strokeWidth}px ${strokeColor}` : "none",
+      strokeWidth > 0 ? `${toCqh(strokeWidth)} ${strokeColor}` : "none",
     textShadow:
       shadow > 0
-        ? `${shadow}px ${shadow}px ${shadow * 2}px rgba(0,0,0,0.9)`
+        ? `${toCqh(shadow)} ${toCqh(shadow)} ${toCqh(shadow * 2)} rgba(0,0,0,0.9)`
         : "none",
-    padding:      `${captionPaddingV}px 14px`,
+    padding:      `${toCqh(captionPaddingV)} ${toCqw(14)}`,
     borderRadius: "3px",
     lineHeight:   "1.4",
-    maxWidth:     `${captionMaxWidth}%`,
+    // Percentage alone collapses to just a few px on narrow (9:16) previews,
+    // wrapping the text one character per line — enforce a readable floor.
+    maxWidth:     `clamp(160px, ${captionMaxWidth}%, 100%)`,
     wordBreak:    "break-word",
   };
 }
@@ -109,7 +130,8 @@ const VideoPlayer = forwardRef(function VideoPlayer(
   { fileUrl, fileType, captions, style, karaokeMode, aspectRatio, onTimeUpdate, onDurationChange },
   ref
 ) {
-  const mediaRef = useRef(null);
+  const mediaRef   = useRef(null);
+  const wrapperRef = useRef(null);
 
   // Expose seekTo and togglePlay to parent via ref
   useImperativeHandle(ref, () => ({
@@ -125,12 +147,50 @@ const VideoPlayer = forwardRef(function VideoPlayer(
       } else {
         mediaRef.current.pause();
       }
+      // If the native play/pause button (inside the video's own controls)
+      // has focus, the browser's default action for Space fires on keyUP
+      // as a click on whatever is focused — re-toggling playback right
+      // after we just set it. Blurring here stops that phantom re-toggle.
+      mediaRef.current.blur();
+    },
+    pause() {
+      mediaRef.current?.pause();
     },
   }));
 
+  const [naturalSize, setNaturalSize] = useState(DEFAULT_NATURAL_SIZE);
+
   const handleLoadedMetadata = useCallback(() => {
-    onDurationChange?.(mediaRef.current?.duration ?? 0);
-  }, [onDurationChange]);
+    const media = mediaRef.current;
+    onDurationChange?.(media?.duration ?? 0);
+    if (fileType === "video" && media?.videoWidth && media?.videoHeight) {
+      setNaturalSize({ width: media.videoWidth, height: media.videoHeight });
+    }
+  }, [onDurationChange, fileType]);
+
+  // The browser's native video fullscreen button only fullscreens the
+  // <video> element itself, leaving the caption overlay (a sibling div)
+  // behind. `controlsList="nofullscreen"` hides that native button in
+  // Chromium browsers; our own button below fullscreens the wrapper
+  // (video + captions together) instead, using a real click gesture so
+  // requestFullscreen is reliably allowed.
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === wrapperRef.current);
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.();
+    } else {
+      wrapperRef.current?.requestFullscreen?.();
+    }
+  }, []);
 
   const currentTimeRef  = useRef(0);
   const [, forceRender] = useReducer((n) => n + 1, 0);
@@ -153,8 +213,8 @@ const VideoPlayer = forwardRef(function VideoPlayer(
   );
 
   const captionTextStyle = useMemo(
-    () => buildCaptionTextStyle(style ?? {}),
-    [style]
+    () => buildCaptionTextStyle(style ?? {}, naturalSize),
+    [style, naturalSize]
   );
 
   const src = fileUrl ?? null;
@@ -195,43 +255,63 @@ const VideoPlayer = forwardRef(function VideoPlayer(
   };
 
   return (
-    <div className={`video-wrapper ${arClass}`}>
-      {fileType === "video" ? (
-        <video
-          ref={mediaRef}
-          src={src}
-          controls
-          onLoadedMetadata={handleLoadedMetadata}
-          onTimeUpdate={handleTimeUpdateInternal}
-          style={{ width: "100%", height: "100%", objectFit: "contain" }}
-        />
-      ) : (
-        <>
-          <div className="audio-placeholder">
-            <span className="audio-placeholder-icon">🎵</span>
-            <span className="audio-placeholder-name">
-              {fileUrl?.split("/").pop() ?? "audio file"}
-            </span>
-          </div>
-          <audio
+    // The outer host is what goes fullscreen. Browsers force a fullscreen
+    // element to fill the entire screen (author max-width/aspect-ratio on
+    // IT gets overridden) — so the aspect-ratio crop lives on the INNER
+    // frame instead, which still sizes itself correctly relative to the
+    // now-screen-filling outer host, keeping the picked aspect ratio
+    // (and the caption overlay, which lives inside the frame too) intact.
+    <div ref={wrapperRef} className="video-wrapper">
+      <div className={`video-frame ${arClass}`}>
+        {fileType === "video" ? (
+          <video
             ref={mediaRef}
             src={src}
             controls
+            controlsList="nofullscreen"
             onLoadedMetadata={handleLoadedMetadata}
             onTimeUpdate={handleTimeUpdateInternal}
-            style={{
-              position: "absolute",
-              bottom:   0,
-              left:     0,
-              right:    0,
-              width:    "100%",
-            }}
+            style={{ width: "100%", height: "100%", objectFit: "contain" }}
           />
-        </>
-      )}
+        ) : (
+          <>
+            <div className="audio-placeholder">
+              <span className="audio-placeholder-icon"><MusicNoteIcon width={26} height={26} /></span>
+              <span className="audio-placeholder-name">
+                {fileUrl?.split("/").pop() ?? "audio file"}
+              </span>
+            </div>
+            <audio
+              ref={mediaRef}
+              src={src}
+              controls
+              onLoadedMetadata={handleLoadedMetadata}
+              onTimeUpdate={handleTimeUpdateInternal}
+              style={{
+                position: "absolute",
+                bottom:   0,
+                left:     0,
+                right:    0,
+                width:    "100%",
+              }}
+            />
+          </>
+        )}
 
-      {/* Caption / Karaoke overlay */}
-      {renderCaptionContent()}
+        {/* Caption / Karaoke overlay */}
+        {renderCaptionContent()}
+      </div>
+
+      {fileType === "video" && (
+        <button
+          type="button"
+          className="video-fullscreen-btn"
+          onClick={toggleFullscreen}
+          title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+        >
+          {isFullscreen ? "⤡" : "⛶"}
+        </button>
+      )}
     </div>
   );
 });

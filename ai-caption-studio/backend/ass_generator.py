@@ -51,7 +51,12 @@ _ALIGNMENT_MAP: dict[str, int] = {
 # Main generator
 # ---------------------------------------------------------------------------
 
-def generate_ass(captions: list[dict], style: dict) -> str:
+def generate_ass(
+    captions: list[dict],
+    style: dict,
+    video_width: int = 1920,
+    video_height: int = 1080,
+) -> str:
     """
     Build a complete ASS file string.
 
@@ -60,6 +65,12 @@ def generate_ass(captions: list[dict], style: dict) -> str:
         strokeColor, strokeWidth, shadow,
         alignment, marginH, marginV, bold, italic,
         animation  ("none" | "fade" | "slide-up")
+
+    video_width / video_height: the actual output video resolution. The ASS
+    script's PlayRes is set to match it exactly, so `fontSize` etc. are real
+    output pixels — the same convention the browser preview uses (font size
+    scaled to the previewed video's native height) — keeping the rendered
+    captions the same visual size as what was previewed.
     """
     font_family       = style.get("fontFamily",      "Arial")
     font_size         = int(style.get("fontSize",       32))
@@ -78,8 +89,8 @@ def generate_ass(captions: list[dict], style: dict) -> str:
     animation         = style.get("animation", "none")          # "none" | "fade" | "slide-up"
 
     # Compute side margins from captionMaxWidth so text area is constrained
-    # PlayResX = 1920; each side margin = half of the unused width
-    computed_margin_lr = max(margin_h, int(1920 * (100 - caption_max_width) / 100 / 2))
+    # (half of the unused width on each side, in PlayResX units)
+    computed_margin_lr = max(margin_h, int(video_width * (100 - caption_max_width) / 100 / 2))
 
     primary_color = _hex_to_ass(text_color,   0)
     outline_color = _hex_to_ass(stroke_color, 0)
@@ -92,8 +103,8 @@ def generate_ass(captions: list[dict], style: dict) -> str:
     header = (
         "[Script Info]\n"
         "ScriptType: v4.00+\n"
-        "PlayResX: 1920\n"
-        "PlayResY: 1080\n"
+        f"PlayResX: {video_width}\n"
+        f"PlayResY: {video_height}\n"
         "ScaledBorderAndShadow: yes\n"
         "YCbCr Matrix: TV.709\n"
         "\n"
@@ -121,17 +132,17 @@ def generate_ass(captions: list[dict], style: dict) -> str:
         v_part = alignment.split("-")[0] if "-" in alignment else "bottom"
         h_part = alignment.split("-")[1] if "-" in alignment else "center"
         if v_part == "bottom":
-            y_end = 1080 - margin_v
+            y_end = video_height - margin_v
         elif v_part == "top":
             y_end = margin_v
         else:
-            y_end = 540
+            y_end = video_height // 2
         if h_part == "center":
-            x_pos = 960
+            x_pos = video_width // 2
         elif h_part == "left":
             x_pos = computed_margin_lr
         else:
-            x_pos = 1920 - computed_margin_lr
+            x_pos = video_width - computed_margin_lr
         y_start = y_end + 50
         anim_tag = f"{{\\an{align_val}\\move({x_pos},{y_start},{x_pos},{y_end},0,350)}}"
 
@@ -144,9 +155,9 @@ def generate_ass(captions: list[dict], style: dict) -> str:
         # Custom position tag
         pos_tag = ""
         if cap.get("customPos") and cap.get("x") is not None and cap.get("y") is not None:
-            # Scale from % (0-100) to ASS 1920x1080 coords
-            x = int(float(cap["x"]) / 100 * 1920)
-            y = int(float(cap["y"]) / 100 * 1080)
+            # Scale from % (0-100) to ASS PlayRes coords
+            x = int(float(cap["x"]) / 100 * video_width)
+            y = int(float(cap["y"]) / 100 * video_height)
             pos_tag = f"{{\\pos({x},{y})}}"
 
         lines.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{anim_tag}{pos_tag}{text}")

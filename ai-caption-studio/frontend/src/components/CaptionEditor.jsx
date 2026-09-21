@@ -1,5 +1,9 @@
 import { useRef, useEffect, useCallback, forwardRef, useState, useMemo } from "react";
 import { formatTime, parseTime } from "../utils/timeUtils.js";
+import {
+  UndoIcon, RedoIcon, SearchIcon, ClockIcon, ScissorsIcon, SparkleIcon,
+  PlusIcon, MergeIcon, TrashIcon, WarningIcon, ChatIcon, BoltIcon,
+} from "./icons.jsx";
 
 // ── Confidence badge ─────────────────────────────────────────────────────────
 function ConfidenceBadge({ confidence }) {
@@ -117,17 +121,18 @@ export default function CaptionEditor({
         <div className="caption-editor-toolbar">
           <span className="caption-count">No captions</span>
           <button className="btn btn-ghost btn-sm" onClick={() => onAdd(null)}>
-            + Add
+            <PlusIcon width={12} height={12} /> Add
           </button>
         </div>
         <div className="empty-state">
-          <div className="empty-state-icon">💬</div>
-          <div>No captions yet.</div>
-          <div>Click <strong>⚡ Auto-Transcribe</strong> to generate them automatically,</div>
-          <div>or add one manually.</div>
-          <br />
+          <div className="empty-state-icon"><ChatIcon width={22} height={22} /></div>
+          <div className="empty-state-title">No captions yet</div>
+          <p className="empty-state-desc">
+            Click <strong><BoltIcon className="inline-icon" width={11} height={11} /> Auto-Transcribe</strong> to
+            generate them automatically, or add one manually.
+          </p>
           <button className="btn btn-accent btn-sm" onClick={() => onAdd(null)}>
-            + Add Caption
+            <PlusIcon width={12} height={12} /> Add Caption
           </button>
         </div>
       </div>
@@ -142,74 +147,58 @@ export default function CaptionEditor({
           {captions.length} caption{captions.length !== 1 ? "s" : ""}
           {overlapCount > 0 && (
             <span className="overlap-badge" title={`${overlapCount * 2} captions overlap`}>
-              ⚠ {overlapCount} overlap{overlapCount !== 1 ? "s" : ""}
+              <WarningIcon width={11} height={11} /> {overlapCount} overlap{overlapCount !== 1 ? "s" : ""}
             </span>
           )}
         </span>
 
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="toolbar-tools">
           {/* Undo / Redo */}
-          <button
-            className="btn-icon"
-            title="Undo (Ctrl+Z)"
-            disabled={!canUndo}
-            onClick={onUndo}
-            style={{ opacity: canUndo ? 1 : 0.35 }}
-          >
-            ↩
+          <button className="btn-icon" title="Undo (Ctrl+Z)" disabled={!canUndo} onClick={onUndo}>
+            <UndoIcon width={15} height={15} />
           </button>
-          <button
-            className="btn-icon"
-            title="Redo (Ctrl+Y)"
-            disabled={!canRedo}
-            onClick={onRedo}
-            style={{ opacity: canRedo ? 1 : 0.35 }}
-          >
-            ↪
+          <button className="btn-icon" title="Redo (Ctrl+Y)" disabled={!canRedo} onClick={onRedo}>
+            <RedoIcon width={15} height={15} />
           </button>
 
-          <div style={{ width: 1, height: 14, background: "var(--border)", margin: "0 2px" }} />
+          <div className="toolbar-sep" />
 
           {/* Find & Replace toggle */}
           <button
-            className={`btn btn-ghost btn-sm ${showFR ? "active-tool" : ""}`}
+            className={`btn-icon ${showFR ? "active-tool" : ""}`}
             title="Find & Replace"
             onClick={() => { setShowFR((v) => !v); setShowShift(false); setShowSplit(false); }}
           >
-            🔍
+            <SearchIcon width={15} height={15} />
           </button>
 
           {/* Shift timings */}
           <button
-            className={`btn btn-ghost btn-sm ${showShift ? "active-tool" : ""}`}
+            className={`btn-icon ${showShift ? "active-tool" : ""}`}
             title="Shift all timings"
             onClick={() => { setShowShift((v) => !v); setShowFR(false); setShowSplit(false); }}
           >
-            ⏱
+            <ClockIcon width={15} height={15} />
           </button>
 
           {/* Auto-split */}
           <button
-            className={`btn btn-ghost btn-sm ${showSplit ? "active-tool" : ""}`}
+            className={`btn-icon ${showSplit ? "active-tool" : ""}`}
             title="Auto-split long captions"
             onClick={() => { setShowSplit((v) => !v); setShowFR(false); setShowShift(false); }}
           >
-            ✂
+            <ScissorsIcon width={15} height={15} />
           </button>
 
           {/* Auto-fix */}
-          <button
-            className="btn btn-ghost btn-sm"
-            title="Auto-fix capitalization & punctuation"
-            onClick={onAutoFix}
-          >
-            ✦
+          <button className="btn-icon" title="Auto-fix capitalization & punctuation" onClick={onAutoFix}>
+            <SparkleIcon width={15} height={15} />
           </button>
 
-          <div style={{ width: 1, height: 14, background: "var(--border)", margin: "0 2px" }} />
+          <div className="toolbar-sep" />
 
           <button className="btn btn-ghost btn-sm" onClick={() => onAdd(null)}>
-            + Add
+            <PlusIcon width={12} height={12} /> Add
           </button>
         </div>
       </div>
@@ -373,7 +362,7 @@ const CaptionItem = forwardRef(function CaptionItem(
         <ConfidenceBadge confidence={cap.confidence} />
 
         {hasIssue === "overlap" && (
-          <span className="issue-badge" title="Overlaps with adjacent caption">⚠</span>
+          <span className="issue-badge" title="Overlaps with adjacent caption"><WarningIcon width={12} height={12} /></span>
         )}
 
         <div className="caption-item-actions">
@@ -383,7 +372,7 @@ const CaptionItem = forwardRef(function CaptionItem(
               title="Merge with next caption"
               onClick={(e) => { e.stopPropagation(); onMerge(cap.id); }}
             >
-              ⊕
+              <MergeIcon width={14} height={14} />
             </button>
           )}
           <button
@@ -391,15 +380,14 @@ const CaptionItem = forwardRef(function CaptionItem(
             title="Add caption after"
             onClick={(e) => { e.stopPropagation(); onAdd(cap.id); }}
           >
-            +
+            <PlusIcon width={14} height={14} />
           </button>
           <button
-            className="btn-icon"
+            className="btn-icon btn-icon-danger"
             title="Delete"
             onClick={(e) => { e.stopPropagation(); onDelete(cap.id); }}
-            style={{ color: "var(--red)" }}
           >
-            ✕
+            <TrashIcon width={14} height={14} />
           </button>
         </div>
       </div>
@@ -420,7 +408,7 @@ const CaptionItem = forwardRef(function CaptionItem(
             title="Split caption at cursor position"
             onClick={handleSplitHere}
           >
-            ✂ Split here
+            <ScissorsIcon width={11} height={11} /> Split here
           </button>
           {cap.words?.length > 0 && (
             <div className="word-timestamps">

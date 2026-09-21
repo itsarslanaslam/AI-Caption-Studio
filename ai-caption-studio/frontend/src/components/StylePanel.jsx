@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
+import { TrashIcon } from "./icons.jsx";
 
 const FONTS = [
   "Arial",
@@ -431,12 +432,11 @@ export default function StylePanel({ style, onChange }) {
                       Load
                     </button>
                     <button
-                      className="btn-icon"
+                      className="btn-icon btn-icon-danger"
                       onClick={() => deletePreset(p.name)}
-                      style={{ color: "var(--red)" }}
                       title="Delete preset"
                     >
-                      ✕
+                      <TrashIcon width={13} height={13} />
                     </button>
                   </div>
                 </div>

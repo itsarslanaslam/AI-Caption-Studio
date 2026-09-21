@@ -28,6 +28,7 @@ def _find_ffmpeg() -> str:
     if platform.system() == "Windows":
         candidates = [
             os.path.expandvars(r"%USERPROFILE%\Desktop\ffmpeg\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe"),
+            r"E:\All Projects\My projects\ai-caption-studio CC\ffmpeg\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe",
             r"C:\ffmpeg\bin\ffmpeg.exe",
             r"C:\Program Files\ffmpeg\bin\ffmpeg.exe",
             r"C:\Program Files (x86)\ffmpeg\bin\ffmpeg.exe",

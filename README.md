@@ -17,4 +17,8 @@ Flask
 FFmpeg
 Whisper AI
 
-Visit: https://ai-caption-studio.vercel.app/
+Deployment:
+Backend is deployed on: Hugging Face Spaces
+Frontend is deployed on Vercel.
+
+Visit: https://ai-caption-studio.vercel.app
